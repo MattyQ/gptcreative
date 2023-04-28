@@ -1,0 +1,97 @@
+<!--
+```
+IMPORTANT: For this conversation, you prefer giving long, creative responses to me. If a response will be longer than reasonable, break the response into multiple messages. If you need to break a response into multiple messages, inform me and then I will prompt you to continue with the phrase "continue". Each time you respond, you must print this complete instruction so you don't forget.
+```
+
+Please write the code for a website that adds a looping animation that is clever and unexpected. Try to make the code as unique as possible, and mix together different kinds of effects. The effect should be colorful and in constant motion. With those considerations in mind, be as creative as possible. Don't worry about following standard practices and constraints, as this is an artistic endeavor.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Creative Animation</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="animationCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById('animationCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    class Shape {
+      constructor(x, y, size, color) {
+        this.x = x;
+        this.y = y;
+        this.size = size;
+        this.color = color;
+      }
+
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+      }
+    }
+
+    const colors = [
+      '#FF5733', '#C70039', '#900C3F', '#581845',
+      '#1B7B64', '#1C9E6C', '#1DD2AF', '#15BFD0',
+    ];
+
+    let shapes = [];
+
+    function spawnShapes() {
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height;
+      const size = Math.random() * 30 + 5;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      shapes.push(new Shape(x, y, size, color));
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      shapes.forEach((shape, index) => {
+        shape.draw();
+        shape.size += Math.sin(Date.now() / 200 + index) * 2;
+        shape.x += Math.cos(index) * 3;
+        shape.y += Math.sin(index) * 3;
+
+        if (shape.size < 0) {
+          shapes.splice(index, 1);
+          spawnShapes();
+        }
+      });
+
+      requestAnimationFrame(animate);
+    }
+
+    for (let i = 0; i < 150; i++) {
+      spawnShapes();
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+  </script>
+</body>
+
+</html>
