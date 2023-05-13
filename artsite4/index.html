@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>3D Julia Set with Three.js</title>
+  <style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+  }
+
+  canvas {
+    display: block;
+  }
+
+  #controls {
+    position: fixed; 
+    bottom: 10px; 
+    left: 10px; 
+    background: #20232A; 
+    padding: 20px; 
+    border-radius: 5px;
+    box-shadow: 0px 0px 10px 2px rgba(0,0,0,0.1);
+    color: #ffffff;
+  }
+
+  #innerControls div {
+    margin-bottom: 10px;
+  }
+
+  #innerControls label {
+    display: block;
+    font-size: 0.8em;
+    margin-bottom: 5px;
+  }
+
+  #innerControls input, #innerControls button {
+    padding: 10px;
+    border: none;
+    border-radius: 5px;
+  }
+
+  #innerControls button {
+    width: 100%;
+    background: #61DAFB;
+    color: #20232A;
+    cursor: pointer;
+    border: 2px solid transparent;  /* Add this line */
+  }
+
+  #innerControls input[type="number"] {
+    background: #61DAFB;
+    color: #20232A;
+  }
+
+  #innerControls input[type="color"] {
+    width: auto;
+  }
+
+  #innerControls button:hover {
+    background: #20232A;
+    border-color: #61DAFB;  /* change this line */
+    color: #61DAFB;
+  }
+
+  #toggleControls {
+    display: block;
+    background: #61DAFB;
+    color: #20232A;
+    padding: 10px;
+    border: 2px solid transparent;  /* Add this line */
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  #toggleControls:hover {
+    background: #20232A;
+    border-color: #61DAFB;  /* change this line */
+    color: #61DAFB;
+  }
+</style>
+  <link href="https://cdn.jsdelivr.net/npm/@simonwep/pickr@1.8.0/dist/themes/nano.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@simonwep/pickr@1.8.0/dist/pickr.min.js"></script>
+
+</head>
+
+<body>
+  <div id="controls">
+  <div id="innerControls">
+    <div>
+      <label for="scale">Scale:</label>
+      <input id="scale" type="number" min="0.1" step="0.1" value="1.5">
+    </div>
+    <div>
+      <label for="rotationSpeed">Rotation Speed:</label>
+      <input id="rotationSpeed" type="number" min="0.0001" step="0.0001" value="0.0025">
+    </div>
+    <div>
+      <label for="iterations">Iterations:</label>
+      <input id="iterations" type="number" min="1" value="20">
+    </div>
+    <div>
+      <label for="iterationSpeed">Iteration Speed:</label>
+      <input id="iterationSpeed" type="number" min="0.1" step="0.1" value="1.0">
+    </div>
+    <div>
+      <label for="maxIterations">Max Iterations:</label>
+      <input id="maxIterations" type="number" min="1" value="100">
+    </div>
+    <div>
+      <label for="baseColor">Base Color:</label>
+      <div id="baseColor"></div>
+    </div>
+    <div>
+      <label for="backgroundColor">Background Color:</label>
+      <div id="backgroundColor"></div>
+    </div>
+    <div>
+      <button id="pauseButton">Pause</button>
+    </div>
+  </div>
+  <div>
+    <button id="toggleControls">Hide Controls</button>
+  </div>
+</div>
+
+
+  <script src="https://threejs.org/build/three.js"></script>
+  <script id="vertexShader" type="x-shader/x-vertex">
+      void main() {
+          gl_Position = vec4(position, 1.0);
+      }
+  </script>
+  <script id="fragmentShader" type="x-shader/x-fragment">
+    uniform vec2 u_resolution;
+    uniform float u_time;
+    uniform float u_scale;
+    uniform vec3 u_baseColor;
+    uniform vec3 u_backgroundColor; // The new uniform
+    uniform float u_iterations; // Change to float for smooth coloring
+
+
+    vec2 complexSquare(vec2 z) {
+        return vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y);
+    }
+
+    vec3 hsv2rgb(vec3 c) {
+        vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    }
+
+    void main() {
+    vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / min(u_resolution.y, u_resolution.x);
+
+    uv *= u_scale;
+
+    vec2 c = vec2(0.8*cos(u_time*0.5), 0.8*sin(u_time*0.5)); // slower rotation
+    vec2 z = uv;
+
+    float n = 0.0;
+    for(int i = 0; i < int(u_iterations); i++) { // more iterations
+        if(dot(z, z) > 4.0) break;
+        z = complexSquare(z) + c;
+        n++;
+    }
+
+    if(dot(z, z) > 4.0) {
+        n += 1.0 - log(log(length(z))) / log(2.0); // Add fractional part for smooth coloring
+        n = smoothstep(0.0, 1.0, n/float(u_iterations)); // adjust to new iteration count
+        vec3 color = hsv2rgb(vec3(n + u_baseColor.r, 1.0, 1.0)); // Use n as hue, full saturation and value for HSV to RGB conversion
+        gl_FragColor = vec4(color, 1.0);
+    } else {
+        gl_FragColor = vec4(u_backgroundColor, 1.0); // Use the background color
+    }
+}
+
+</script>
+
+  <script>
+    let camera, scene, renderer;
+    let uniforms;
+
+    // Configurable parameters
+    let scale = 1.5;  // Scale of the Julia set
+    let rotationSpeed = 0.0025;  // Speed of the rotation
+    let iterations = 20;  // Number of iterations for the Julia set
+    let iterationSpeed = 0.2; // Change to float for smooth coloring
+    let increaseIterations = true;
+    let maxIterations = 100.0; // Change to float for smooth coloring
+
+    function init() {
+      camera = new THREE.Camera();
+      camera.position.z = 1;
+
+      scene = new THREE.Scene();
+
+      let geometry = new THREE.PlaneBufferGeometry(2, 2);
+
+      uniforms = {
+        u_time: {type: "f", value: 1.0},
+        u_resolution: {type: "v2", value: new THREE.Vector2()},
+        u_scale: {type: "f", value: scale},
+        u_iterations: {type: "f", value: iterations}, // Change to float for smooth coloring
+        u_baseColor: {type: "v3", value: new THREE.Vector3(1, 0, 0)}, // Default to red
+        u_backgroundColor: {type: "v3", value: new THREE.Vector3(0, 0, 0)} // Default to black
+      };
+
+      let material = new THREE.ShaderMaterial({
+        uniforms: uniforms,
+        vertexShader: document.getElementById('vertexShader').textContent,
+        fragmentShader: document.getElementById('fragmentShader').textContent
+      });
+
+      let mesh = new THREE.Mesh(geometry, material);
+      scene.add(mesh);
+
+      renderer = new THREE.WebGLRenderer({antialias: true}); // Enable antialiasing
+      document.body.appendChild(renderer.domElement);
+
+      onWindowResize();
+      window.addEventListener('resize', onWindowResize, false);
+    }
+
+    function onWindowResize(event) {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      uniforms.u_resolution.value.x = renderer.domElement.width;
+      uniforms.u_resolution.value.y = renderer.domElement.height;
+    }
+
+    let paused = false;
+      document.getElementById('pauseButton').addEventListener('click', function() {
+      paused = !paused;
+      if (paused === false) {
+        animate();
+      }
+      this.textContent = paused ? 'Resume' : 'Pause';
+    });
+    
+    function animate() {
+      if (!paused) {
+        requestAnimationFrame(animate);
+        
+        // Increase the number of iterations over time, up to the maximum
+        if (increaseIterations === true) {
+          uniforms.u_iterations.value += iterationSpeed;
+          if (uniforms.u_iterations.value >= maxIterations) {  // Use >= instead of ===
+            increaseIterations = false;
+          }
+        } else {
+          uniforms.u_iterations.value -= iterationSpeed;
+          if (uniforms.u_iterations.value <= iterations) {  // Use <= instead of ===
+            increaseIterations = true;
+          }
+        }
+        
+        render();
+      }
+    }
+
+    function render() {
+      uniforms.u_time.value += rotationSpeed; // controlled animation speed
+      renderer.render(scene, camera);
+    }
+
+    document.getElementById('scale').addEventListener('change', function() {
+      scale = parseFloat(this.value);
+      uniforms.u_scale.value = scale;
+    });
+    
+    document.getElementById('rotationSpeed').addEventListener('change', function() {
+      rotationSpeed = parseFloat(this.value);
+    });
+    
+    document.getElementById('iterations').addEventListener('change', function() {
+      iterations = parseFloat(this.value);
+    });
+    
+    document.getElementById('iterationSpeed').addEventListener('change', function() {
+      iterationSpeed = parseFloat(this.value);
+    });
+    
+    document.getElementById('maxIterations').addEventListener('change', function() {
+      maxIterations = parseFloat(this.value);
+    });
+
+    let baseColorPicker = Pickr.create({
+    el: '#baseColor',
+    theme: 'nano', // or 'monolith', or 'nano'
+    default: '#ff0000',
+
+    swatches: [
+        'rgba(244, 67, 54, 1)',
+        'rgba(233, 30, 99, 0.95)',
+        'rgba(156, 39, 176, 0.9)',
+        'rgba(103, 58, 183, 0.85)',
+        'rgba(63, 81, 181, 0.8)',
+        'rgba(33, 150, 243, 0.75)',
+        'rgba(3, 169, 244, 0.7)',
+        'rgba(0, 188, 212, 0.7)',
+        'rgba(0, 150, 136, 0.75)',
+        'rgba(76, 175, 80, 0.8)',
+        'rgba(139, 195, 74, 0.85)',
+        'rgba(205, 220, 57, 0.9)',
+        'rgba(255, 235, 59, 0.95)',
+        'rgba(255, 193, 7, 1)'
+    ],
+
+    components: {
+        preview: true,
+        opacity: true,
+        hue: true,
+
+        interaction: {
+            hex: true,
+            rgba: true,
+            hsla: true,
+            hsva: true,
+            cmyk: true,
+            input: true,
+            clear: false,
+            save: true
+        }
+    }
+});
+
+baseColorPicker.on('save', (color, instance) => {
+    let hsvaColor = color.toHSVA();
+    // hsvaColor is an array: [h, s, v, a]
+    uniforms.u_baseColor.value = new THREE.Vector3(hsvaColor[0], hsvaColor[1], hsvaColor[2]);
+    baseColorPicker.hide();
+});
+
+
+    // Background color picker
+    let backgroundColorPicker = Pickr.create({
+      el: '#backgroundColor',
+      theme: 'nano',
+      default: '#000000',
+
+      swatches: [
+          'rgba(244, 67, 54, 1)',
+          'rgba(233, 30, 99, 0.95)',
+          'rgba(156, 39, 176, 0.9)',
+          'rgba(103, 58, 183, 0.85)',
+          'rgba(63, 81, 181, 0.8)',
+          'rgba(33, 150, 243, 0.75)',
+          'rgba(3, 169, 244, 0.7)',
+          'rgba(0, 188, 212, 0.7)',
+          'rgba(0, 150, 136, 0.75)',
+          'rgba(76, 175, 80, 0.8)',
+          'rgba(139, 195, 74, 0.85)',
+          'rgba(205, 220, 57, 0.9)',
+          'rgba(255, 235, 59, 0.95)',
+          'rgba(255, 193, 7, 1)'
+      ],
+
+      components: {
+          preview: true,
+          opacity: true,
+          hue: true,
+
+          interaction: {
+              hex: true,
+              rgba: true,
+              hsla: true,
+              hsva: true,
+              cmyk: true,
+              input: true,
+              clear: false,
+              save: true
+          }
+      }
+    });
+
+    backgroundColorPicker.on('save', (color, instance) => {
+    let rgbaColor = color.toRGBA();
+    uniforms.u_backgroundColor.value = new THREE.Vector3(rgbaColor[0]/255, rgbaColor[1]/255, rgbaColor[2]/255);
+    backgroundColorPicker.hide();
+});
+
+
+
+    document.getElementById('toggleControls').addEventListener('click', function() {
+  let innerControls = document.getElementById('innerControls');
+  if (innerControls.style.display === "none") {
+    innerControls.style.display = "block";
+    this.textContent = "Hide Controls";
+  } else {
+    innerControls.style.display = "none";
+    this.textContent = "Show Controls";
+  }
+});
+
+    
+    init();
+    animate();
+  </script>
+
+</body>
+
+</html>
+
