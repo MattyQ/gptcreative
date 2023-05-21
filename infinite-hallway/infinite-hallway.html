@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Hallway Animation</title>
+  <style>
+    body {
+      margin: 0;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <script src="https://threejs.org/build/three.js"></script>
+  <script>
+    function createDataURL(color) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, 1, 1);
+      return canvas.toDataURL();
+    }
+
+    const wallTexture = new THREE.TextureLoader().load(createDataURL('#808080')); // Replace with image URL for wall texture
+    const floorTexture = new THREE.TextureLoader().load(createDataURL('#D3D3D3')); // Replace with image URL for floor texture
+    const ceilingTexture = new THREE.TextureLoader().load(createDataURL('#FFFFFF')); // Replace with image URL for ceiling texture
+    const doorTexture = new THREE.TextureLoader().load(createDataURL('#804000')); // Replace with image URL for door texture
+    const signTexture = new THREE.TextureLoader().load(createDataURL('#ffffff')); // Replace with image URL for sign texture
+    const lightTexture = new THREE.TextureLoader().load(createDataURL('#ffff00')); // Replace with image URL for light texture
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const hallwayWidth = 1;
+    const hallwayHeight = 3;
+
+    const wallGeometry = new THREE.BoxGeometry(hallwayWidth, hallwayHeight, 1);
+    const floorGeometry = new THREE.PlaneGeometry(hallwayWidth * 2, 1);
+    const ceilingGeometry = new THREE.PlaneGeometry(hallwayWidth * 2, 1);
+    const doorGeometry = new THREE.BoxGeometry(hallwayWidth / 2, hallwayHeight / 2, 0.1); // Modify door width
+    const signGeometry = new THREE.BoxGeometry(hallwayWidth / 2, hallwayHeight / 8, 0.1);
+    const lightGeometry = new THREE.SphereGeometry(0.1, 32, 32);
+
+    const wallMaterial = new THREE.MeshPhongMaterial({map: wallTexture});
+    const floorMaterial = new THREE.MeshPhongMaterial({map: floorTexture});
+    const ceilingMaterial = new THREE.MeshPhongMaterial({map: ceilingTexture});
+    const doorMaterial = new THREE.MeshPhongMaterial({map: doorTexture});
+    const signMaterial = new THREE.MeshPhongMaterial({map: signTexture});
+    const lightMaterial = new THREE.MeshPhongMaterial({map: lightTexture, emissive: '#ffff00'}); // Make the light orbs emissive
+
+    const hallwaySegments = [];
+    for (let i = 0; i < 40; i++) {
+      const segment = createHallwaySegment(-i);
+      addHallwaySegmentToScene(segment);
+      hallwaySegments.push(segment);
+    }
+
+    camera.position.z = 0;
+    camera.position.y = 1.5; // Eye level
+
+    const speed = 0.1;
+
+    function animate() {
+      // Move camera
+      camera.position.z -= speed;
+
+      // Check if the first hallway segment is behind the camera
+      if (hallwaySegments[0].floor.position.z > camera.position.z + 1) {
+        // If so, reposition it in front of the last segment
+        const segment = hallwaySegments.shift();
+        removeHallwaySegmentFromScene(segment);
+        repositionHallwaySegment(segment, hallwaySegments[hallwaySegments.length - 1].floor.position.z - 1);
+        addHallwaySegmentToScene(segment);
+        hallwaySegments.push(segment);
+      }
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+
+     // Create a function to generate a new hallway segment at a specific z position
+    function createHallwaySegment(zPosition) {
+      const segment = {
+        walls: [],
+        floor: null,
+        ceiling: null,
+        door: null,
+        sign: null,
+        light: null,
+        pointLight: null,
+      };
+
+      const leftWall = new THREE.Mesh(wallGeometry, wallMaterial);
+      leftWall.position.set(-hallwayWidth, hallwayHeight / 2, zPosition);
+      segment.walls.push(leftWall);
+
+      const rightWall = new THREE.Mesh(wallGeometry, wallMaterial);
+      rightWall.position.set(hallwayWidth, hallwayHeight / 2, zPosition);
+      segment.walls.push(rightWall);
+
+      const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(0, 0, zPosition);
+      segment.floor = floor;
+
+      const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
+      ceiling.rotation.x = Math.PI / 2;
+      ceiling.position.set(0, hallwayHeight, zPosition);
+      segment.ceiling = ceiling;
+
+      if (Math.abs(zPosition) % 10 === 0) {
+        const doorSide = Math.abs(zPosition) % 20 === 0 ? -1 : 1; // Alternating sides
+        const door = new THREE.Mesh(doorGeometry, doorMaterial);
+        door.position.set(doorSide * hallwayWidth + (doorSide * doorGeometry.parameters.width / 2), hallwayHeight / 4, zPosition);
+        segment.door = door;
+
+        const sign = new THREE.Mesh(signGeometry, signMaterial);
+        sign.position.set(doorSide * hallwayWidth + (doorSide * signGeometry.parameters.width / 2), hallwayHeight * 3 / 4, zPosition);
+        segment.sign = sign;
+      }
+
+      if (Math.abs(zPosition) % 5 === 0) {
+        const light = new THREE.Mesh(lightGeometry, lightMaterial);
+        light.position.set(0, hallwayHeight - 0.1, zPosition);
+        segment.light = light;
+
+        const pointLight = new THREE.PointLight(0xffffff, 1, 2);
+        pointLight.position.set(0, hallwayHeight - 0.1, zPosition);
+        segment.pointLight = pointLight;
+      }
+
+      return segment;
+    }
+
+    // Create a function to add a hallway segment to the scene
+    function addHallwaySegmentToScene(segment) {
+      segment.walls.forEach(wall => scene.add(wall));
+      scene.add(segment.floor);
+      scene.add(segment.ceiling);
+      if (segment.door) scene.add(segment.door);
+      if (segment.sign) scene.add(segment.sign);
+      if (segment.light) scene.add(segment.light);
+      if (segment.pointLight) scene.add(segment.pointLight);
+    }
+
+    // Create a function to remove a hallway segment from the scene
+    function removeHallwaySegmentFromScene(segment) {
+      segment.walls.forEach(wall => scene.remove(wall));
+      scene.remove(segment.floor);
+      scene.remove(segment.ceiling);
+      if (segment.door) scene.remove(segment.door);
+      if (segment.sign) scene.remove(segment.sign);
+      if (segment.light) scene.remove(segment.light);
+      if (segment.pointLight) scene.remove(segment.pointLight);
+    }
+
+    // Create a function to reposition a hallway segment
+    function repositionHallwaySegment(segment, zPosition) {
+      segment.walls.forEach(wall => wall.position.z = zPosition);
+      segment.floor.position.z = zPosition;
+      segment.ceiling.position.z = zPosition;
+      if (segment.door) segment.door.position.z = zPosition;
+      if (segment.sign) segment.sign.position.z = zPosition;
+      if (segment.light) segment.light.position.z = zPosition;
+      if (segment.pointLight) segment.pointLight.position.z = zPosition;
+    }
+
+  </script>
+</body>
+</html>
